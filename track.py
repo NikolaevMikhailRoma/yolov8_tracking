@@ -14,6 +14,9 @@ import numpy as np
 from pathlib import Path
 import torch
 import torch.backends.cudnn as cudnn
+import math
+
+import numpy as np
 
 FILE = Path(__file__).resolve()
 ROOT = FILE.parents[0]  # yolov5 strongsort root directory
@@ -41,6 +44,24 @@ from yolov8.ultralytics.yolo.utils.plotting import Annotator, colors, save_one_b
 
 from trackers.multi_tracker_zoo import create_tracker
 
+
+def create_polyline(point_list, length):
+    # Return a line of a (length) from a list of points (point_list)
+    # todo: может выводить линию меньше lenght, обратить внимание
+    polyline = []
+    x, y = point_list[-1]
+    for i in range(len(point_list)-1, -1, -1):
+        px, py = point_list[i]
+        dist = ((px - x)**2 + (py - y)**2)**0.5
+        if dist <= length:
+            polyline.append((px, py))
+            length -= dist
+            x, y = px, py
+        else:
+            dx, dy = px - x, py - y
+            polyline.append((int(x + dx * length / dist), int(y + dy * length / dist)))
+            break
+    return polyline[::-1]
 
 @torch.no_grad()
 def run(
@@ -77,6 +98,8 @@ def run(
         dnn=False,  # use OpenCV DNN for ONNX inference
         vid_stride=1,  # video frame-rate stride
         retina_masks=False,
+        draw_track_lines_bottom=False,
+        track_lines_len=0,
 ):
 
     source = str(source)
@@ -104,6 +127,7 @@ def run(
     model = AutoBackend(yolo_weights, device=device, dnn=dnn, fp16=half)
     stride, names, pt = model.stride, model.names, model.pt
     imgsz = check_imgsz(imgsz, stride=stride)  # check image size
+    trajectory = {} # dict for drawing trajectories
 
     # Dataloader
     bs = 1
@@ -179,6 +203,7 @@ def run(
             else:
                 p, im0, _ = path, im0s.copy(), getattr(dataset, 'frame', 0)
                 p = Path(p)  # to Path
+
                 # video file
                 if source.endswith(VID_FORMATS):
                     txt_file_name = p.stem
@@ -235,10 +260,40 @@ def run(
                     
                     for j, (output) in enumerate(outputs[i]):
                         
-                        bbox = output[0:4]
+                        bbox = output[0:4] # bbox_left, bbox_top, bbox_right, bbox_bottom = bbox
                         id = output[4]
                         cls = output[5]
                         conf = output[6]
+
+                        if draw_track_lines_bottom:
+                            # draw object track
+                            # center = ((int(bbox[0]) + int(bbox[2])) // 2,(int(bbox[1]) + int(bbox[3])) // 2)
+                            bottom = ((int(bbox[0]) + int(bbox[2])) // 2, (int(bbox[3])))
+                            ### запишем точки в файл
+                            with open(txt_path + '_bottom_track.txt', 'a') as f:
+                                f.write(('%g ' * 4 + '\n') % (frame_idx + 1, id, bottom[0], bottom[1], ))
+                            if id not in trajectory:
+                                trajectory[id] = []
+                            trajectory[id].append(bottom)
+                            if len(trajectory[id]) > 2:
+                                # thickness = int(np.sqrt(1000/float(i1+10))*0.3)
+                                thickness = 2
+                                points = trajectory[id]
+                                polyline = create_polyline(points, track_lines_len)
+
+                                ### видимо в этой версии cv2 этой функции нет
+                                # try:
+                                #     cv2.polylines(im0, [np.array([polyline])], isClosed=True, color=(0, 0, 255), thickness=thickness)
+                                # except Exception as e:
+                                #     print(e)
+                                #     pass
+
+                                for i1 in range(len(polyline), 1, -1):
+
+                                    try:
+                                        cv2.line(im0, polyline[i1], polyline[i1 - 1], (0, 0, 255), thickness)
+                                    except:
+                                        pass
 
                         if save_txt:
                             # to MOT format
@@ -318,18 +373,23 @@ def parse_opt():
     parser.add_argument('--reid-weights', type=Path, default=WEIGHTS / 'osnet_x0_25_msmt17.pt')
     parser.add_argument('--tracking-method', type=str, default='deepocsort', help='deepocsort, botsort, strongsort, ocsort, bytetrack')
     parser.add_argument('--tracking-config', type=Path, default=None)
-    parser.add_argument('--source', type=str, default='0', help='file/dir/URL/glob, 0 for webcam')  
+    parser.add_argument('--source', type=str, default='0', help='file/dir/URL/glob, 0 for webcam')
+    # parser.add_argument('--source', type=str, default='out.avi', help='file/dir/URL/glob, 0 for webcam')
     parser.add_argument('--imgsz', '--img', '--img-size', nargs='+', type=int, default=[640], help='inference size h,w')
     parser.add_argument('--conf-thres', type=float, default=0.5, help='confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.5, help='NMS IoU threshold')
     parser.add_argument('--max-det', type=int, default=1000, help='maximum detections per image')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--show-vid', action='store_true', help='display tracking video results')
+    # parser.add_argument('--show-vid', action='store_true', default=True, help='display tracking video results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
+    # parser.add_argument('--save-txt', default=True, action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
     parser.add_argument('--save-crop', action='store_true', help='save cropped prediction boxes')
     parser.add_argument('--save-trajectories', action='store_true', help='save trajectories for each track')
+    # parser.add_argument('--save-trajectories', default=True, action='store_true', help='save trajectories for each track')
     parser.add_argument('--save-vid', action='store_true', help='save video tracking results')
+    # parser.add_argument('--save-vid', default=True, action='store_true', help='save video tracking results')
     parser.add_argument('--nosave', action='store_true', help='do not save images/videos')
     # class 0 is person, 1 is bycicle, 2 is car... 79 is oven
     parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --classes 0, or --classes 0 2 3')
@@ -340,6 +400,7 @@ def parse_opt():
     parser.add_argument('--project', default=ROOT / 'runs' / 'track', help='save results to project/name')
     parser.add_argument('--name', default='exp', help='save results to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    # parser.add_argument('--exist-ok', default=True, action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--line-thickness', default=2, type=int, help='bounding box thickness (pixels)')
     parser.add_argument('--hide-labels', default=False, action='store_true', help='hide labels')
     parser.add_argument('--hide-conf', default=False, action='store_true', help='hide confidences')
@@ -348,6 +409,9 @@ def parse_opt():
     parser.add_argument('--dnn', action='store_true', help='use OpenCV DNN for ONNX inference')
     parser.add_argument('--vid-stride', type=int, default=1, help='video frame-rate stride')
     parser.add_argument('--retina-masks', action='store_true', help='whether to plot masks in native resolution')
+    parser.add_argument('--draw-track-lines-bottom', action='store_true', help='display object trajectory lines') # add drawing track of bboxes
+    # parser.add_argument('--draw-track-lines-bottom', default=True, action='store_true', help='display object trajectory lines')
+    parser.add_argument('--track-lines-len', default=50, action='store_true', help='len of drawing trajectory lines') # add pixels len of tracks of bboxes
     opt = parser.parse_args()
     opt.imgsz *= 2 if len(opt.imgsz) == 1 else 1  # expand
     opt.tracking_config = ROOT / 'trackers' / opt.tracking_method / 'configs' / (opt.tracking_method + '.yaml')

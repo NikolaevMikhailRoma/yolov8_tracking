@@ -1,0 +1,15 @@
+# python track.py --yolo-weights yolov8s.pt --reid-weights osnet_x0_25_msmt17.pt --source out.avi --save-vid --save-txt --save-conf --save-trajectories --max-det=10 --classes 0 --exist-ok
+
+python track.py --source 0 --yolo-weights yolov8s.pt --exist-ok --draw-track-lines-bottom
+python track.py --yolo-weights yolov8m.pt --reid-weights osnet_x0_25_msmt17.pt --source out.avi --save-vid --draw-track-lines-bottom
+# python track.py --yolo-weights yolov8s.pt
+
+для обрезки видео
+y | ffmpeg -ss 00:00:00 -i 001.avi -t 00:00:05 -c copy out.avi
+
+
+python track.py --yolo-weights yolov8m.pt --reid-weights osnet_x0_25_msmt17.pt --source ./HallWayTracking/HallWayTracking/videos/001.avi \
+--save-vid --draw-track-lines-bottom --exist-ok --save-trajectories --save-txt
+
+python bird_eye.py --source-homorgafhy ./HallWayTracking/HallWayTracking/homography/001.txt --track-source ./runs/track/exp/tracks/001.txt \
+--homography-output-file ./runs/track/exp/homography/001.avi

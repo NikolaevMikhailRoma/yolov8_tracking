@@ -228,6 +228,59 @@ The set of hyperparameters leading to the best HOTA result are written to the tr
 
 </details>
 
+<details>
+<summary>!!!NEW!!! Showing the line of movement of the box at the bottom point </summary>
+
+Example based on the HallWayTracking dataset (http://www.santhoshsunderrajan.com/datasets.html#hfh_tracking)
+```bash
+python track.py --yolo-weights yolov8m.pt --reid-weights osnet_x0_25_msmt17.pt 
+        --source ./HallWayTracking/HallWayTracking/videos/001.avi # video path
+        --save-vid                  # 
+        --draw-track-lines-bottom   # show track lines in bottom
+        --exist-ok                  # save video default ./runs/track/exp/video_file
+        --save-trajectories         # save bottom bboxes points in ./runs/track/exp/tracks/video_file_bottom_track.avi
+        --save-txt                  # save bboxes points in MOT format in ./runs/track/exp/tracks/video_file.avi
+        --track-lines-len           # len of track polylines, default = 50
+```
+<div align="center">
+  <p>
+  <img src="runs/track/exp/001.gif" width="400"/>
+  </p>
+  <br>
+</div>
+</details>
+
+<details>
+<summary>!!!NEW!!! Use of homography matrix with visualization </summary>
+
+Example based on the HallWayTracking dataset (http://www.santhoshsunderrajan.com/datasets.html#hfh_tracking)
+Previosly get the box data from the video
+```bash
+python track.py --yolo-weights yolov8m.pt --reid-weights osnet_x0_25_msmt17.pt 
+        --source ./HallWayTracking/HallWayTracking/videos/001.avi # video path
+        --save-vid                  # 
+        --draw-track-lines-bottom   # show track lines in bottom
+        --exist-ok                  # save video default ./runs/track/exp/video_file
+        --save-trajectories         # save bottom bboxes points in ./runs/track/exp/tracks/video_file_bottom_track.avi
+        --save-txt                  # save bboxes points in MOT format in ./runs/track/exp/tracks/video_file.avi
+        --track-lines-len           # len of track polylines, default = 50
+```
+Apply the homography matrix and create a video of the movement of objects
+```bash
+python bird_eye.py 
+  --source-homorgafhy ./HallWayTracking/HallWayTracking/homography/001.txt  # matrix of homography
+  --track-source ./runs/track/exp/tracks/001.txt                            # bboxes in MOT format
+  --homography-output-file ./runs/track/exp/homography/001.avi              #  
+  --track-lines-len 50                                                      # use 1 if wand see only points
+```
+<div align="center">
+  <p>
+  <img src="runs/track/exp/001.gif" height="200"/> <img src="runs/track/exp/homography/001.gif" width="200"/>
+  </p>
+
+</div>
+
+</details>
 ## Contact 
 
 For Yolov8 tracking bugs and feature requests please visit [GitHub Issues](https://github.com/mikel-brostrom/Yolov5_StrongSORT_OSNet/issues). 
